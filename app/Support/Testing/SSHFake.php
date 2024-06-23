@@ -2,8 +2,10 @@
 
 namespace App\Support\Testing;
 
+use App\Contracts\Services\RunnerContract;
 use App\Exceptions\SSHConnectionError;
 use App\Helpers\SSH;
+use App\Models\Server;
 use Illuminate\Support\Traits\ReflectsClosures;
 use PHPUnit\Framework\Assert;
 
@@ -17,6 +19,13 @@ class SSHFake extends SSH
 
     protected bool $connectionWillFail = false;
 
+    public function init(Server $server, ?string $asUser = null): RunnerContract
+    {
+        $mock = \Mockery::mock(RunnerContract::Class);
+        $mock->shouldReceive('setLog')->once()->andReturnSelf();
+        return $mock;
+    }
+
     public function __construct(?string $output = null)
     {
         $this->output = $output;
@@ -27,11 +36,13 @@ class SSHFake extends SSH
         $this->connectionWillFail = true;
     }
 
-    public function connect(bool $sftp = false): void
+    public function connect(bool $sftp = false): static
     {
         if ($this->connectionWillFail) {
             throw new SSHConnectionError('Connection failed');
         }
+
+        return $this;
     }
 
     public function exec(string $command, string $log = '', ?int $siteId = null, ?bool $stream = false): string
@@ -64,6 +75,13 @@ class SSHFake extends SSH
     public function upload(string $local, string $remote): void
     {
         $this->log = null;
+    }
+
+    public function setLog(?ServerLog $log): static
+    {
+        $this->log = $log;
+
+        return $this;
     }
 
     public function assertExecuted(array|string $commands): void

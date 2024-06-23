@@ -3,8 +3,9 @@
 namespace App\Models;
 
 use App\Actions\Server\CheckConnection;
+use App\Contracts\Services\RunnerContract;
 use App\Enums\ServiceStatus;
-use App\Facades\SSH;
+use App\Runners\RunnerFactory;
 use App\ServerTypes\ServerType;
 use App\SSH\Cron\Cron;
 use App\SSH\OS\OS;
@@ -255,9 +256,10 @@ class Server extends AbstractModel
         return $service;
     }
 
-    public function ssh(?string $user = null): mixed
+    public function ssh(?string $user = null): RunnerContract
     {
-        return SSH::init($this, $user);
+        // We want to centralize the logic for how we connect to servers so it can be easier to change in the future
+        return (new RunnerFactory)->make($this, $user);
     }
 
     public function installedPHPVersions(): array
