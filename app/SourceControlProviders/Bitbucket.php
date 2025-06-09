@@ -52,7 +52,7 @@ class Bitbucket extends AbstractSourceControlProvider
     /**
      * @throws Exception
      */
-    public function getRepo(?string $repo = null): mixed
+    public function getRepo(string $repo): mixed
     {
         $res = Http::withHeaders($this->getAuthenticationHeaders())
             ->get($this->apiUrl."/repositories/$repo");
@@ -163,6 +163,9 @@ class Bitbucket extends AbstractSourceControlProvider
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     protected function getCommitter(string $raw): array
     {
         $committer = explode(' <', $raw);
@@ -173,6 +176,9 @@ class Bitbucket extends AbstractSourceControlProvider
         ];
     }
 
+    /**
+     * @return array<string, string>
+     */
     private function getAuthenticationHeaders(): array
     {
         $username = $this->data()['username'];
@@ -182,5 +188,10 @@ class Bitbucket extends AbstractSourceControlProvider
         return [
             'Authorization' => 'Basic '.$basicAuth,
         ];
+    }
+
+    public function getWebhookBranch(array $payload): string
+    {
+        return data_get($payload, 'push.changes.0.new.name', 'default-branch');
     }
 }

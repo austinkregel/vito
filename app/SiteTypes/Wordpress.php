@@ -9,7 +9,6 @@ use App\Enums\SiteFeature;
 use App\Exceptions\SSHError;
 use App\Models\Database;
 use App\Models\DatabaseUser;
-use App\SSH\Services\Webserver\Webserver;
 use Closure;
 use Illuminate\Validation\Rule;
 
@@ -24,6 +23,7 @@ class Wordpress extends AbstractSiteType
     {
         return [
             SiteFeature::SSL,
+            SiteFeature::COMMANDS,
         ];
     }
 
@@ -43,10 +43,8 @@ class Wordpress extends AbstractSiteType
             ],
             'database' => [
                 'required',
-                Rule::unique('databases', 'name')->where(function ($query) {
-                    return $query->where('server_id', $this->site->server_id);
-                }),
-                function (string $attribute, mixed $value, Closure $fail) {
+                Rule::unique('databases', 'name')->where(fn ($query) => $query->where('server_id', $this->site->server_id)),
+                function (string $attribute, mixed $value, Closure $fail): void {
                     if (! $this->site->server->database()) {
                         $fail(__('Database is not installed'));
                     }
@@ -54,9 +52,7 @@ class Wordpress extends AbstractSiteType
             ],
             'database_user' => [
                 'required',
-                Rule::unique('database_users', 'username')->where(function ($query) {
-                    return $query->where('server_id', $this->site->server_id);
-                }),
+                Rule::unique('database_users', 'username')->where(fn ($query) => $query->where('server_id', $this->site->server_id)),
             ],
             'database_password' => 'required',
         ];
@@ -79,6 +75,8 @@ class Wordpress extends AbstractSiteType
             'email' => $input['email'],
             'password' => $input['password'],
             'database' => $input['database'],
+            'database_charset' => $input['charset'],
+            'database_collation' => $input['collation'],
             'database_user' => $input['database_user'],
             'database_password' => $input['database_password'],
         ];
@@ -91,24 +89,30 @@ class Wordpress extends AbstractSiteType
     {
         $this->isolate();
 
-        /** @var Webserver $webserver */
-        $webserver = $this->site->server->webserver()->handler();
-        $webserver->createVHost($this->site);
+        $this->site->webserver()->createVHost($this->site);
         $this->progress(30);
+
         /** @var Database $database */
         $database = app(CreateDatabase::class)->create($this->site->server, [
             'name' => $this->site->type_data['database'],
+            'charset' => $this->site->type_data['database_charset'],
+            'collation' => $this->site->type_data['database_collation'],
         ]);
+
         /** @var DatabaseUser $databaseUser */
         $databaseUser = app(CreateDatabaseUser::class)->create($this->site->server, [
             'username' => $this->site->type_data['database_user'],
             'password' => $this->site->type_data['database_password'],
+            'collation' => $this->site->type_data['database_collation'],
+            'charset' => $this->site->type_data['database_charset'],
             'remote' => false,
             'host' => 'localhost',
         ], [$database->name]);
+
         app(LinkUser::class)->link($databaseUser, [
             'databases' => [$database->name],
         ]);
+
         $this->site->php()?->restart();
         $this->progress(60);
         app(\App\SSH\Wordpress\Wordpress::class)->install($this->site);

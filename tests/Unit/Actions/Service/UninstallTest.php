@@ -6,8 +6,8 @@ use App\Actions\Service\Uninstall;
 use App\Enums\ServiceStatus;
 use App\Facades\SSH;
 use App\Models\Database;
-use App\Models\Queue;
 use App\Models\Service;
+use App\Models\Worker;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -52,6 +52,18 @@ class UninstallTest extends TestCase
     }
 
     /**
+     * Cannot uninstall caddy because some sites using it
+     */
+    public function test_cannot_uninstall_caddy(): void
+    {
+        SSH::fake();
+
+        $this->expectException(ValidationException::class);
+
+        app(Uninstall::class)->uninstall($this->server->webserver());
+    }
+
+    /**
      * Cannot uninstall mysql because some databases exist
      */
     public function test_cannot_uninstall_mysql(): void
@@ -74,7 +86,7 @@ class UninstallTest extends TestCase
     {
         SSH::fake();
 
-        Queue::factory()->create([
+        Worker::factory()->create([
             'server_id' => $this->server->id,
             'site_id' => $this->site->id,
         ]);

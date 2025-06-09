@@ -13,6 +13,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ServerResource;
 use App\Models\Project;
 use App\Models\Server;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\ResourceCollection;
 use Knuckles\Scribe\Attributes\BodyParam;
@@ -51,7 +52,7 @@ class ServerController extends Controller
     #[BodyParam(name: 'port', description: 'SSH Port if the provider is custom')]
     #[BodyParam(name: 'name', description: 'The name of the server.', required: true)]
     #[BodyParam(name: 'os', description: 'The os of the server', required: true)]
-    #[BodyParam(name: 'webserver', description: 'Web server', required: true, enum: [Webserver::NONE, Webserver::NGINX])]
+    #[BodyParam(name: 'webserver', description: 'Web server', required: true, enum: [Webserver::NONE, Webserver::NGINX, Webserver::CADDY])]
     #[BodyParam(name: 'database', description: 'Database', required: true, enum: [Database::NONE, Database::MYSQL57, Database::MYSQL80, Database::MARIADB103, Database::MARIADB104, Database::MARIADB103, Database::POSTGRESQL12, Database::POSTGRESQL13, Database::POSTGRESQL14, Database::POSTGRESQL15, Database::POSTGRESQL16], )]
     #[BodyParam(name: 'php', description: 'PHP version', required: true, enum: [PHP::V70, PHP::V71, PHP::V72, PHP::V73, PHP::V74, PHP::V80, PHP::V81, PHP::V82, PHP::V83])]
     #[ResponseFromApiResource(ServerResource::class, Server::class)]
@@ -61,7 +62,9 @@ class ServerController extends Controller
 
         $this->validate($request, CreateServer::rules($project, $request->input()));
 
-        $server = app(CreateServer::class)->create(auth()->user(), $project, $request->all());
+        /** @var User $user */
+        $user = auth()->user();
+        $server = app(CreateServer::class)->create($user, $project, $request->all());
 
         return new ServerResource($server);
     }
@@ -81,7 +84,7 @@ class ServerController extends Controller
     #[Post('{server}/reboot', name: 'api.projects.servers.reboot', middleware: 'ability:write')]
     #[Endpoint(title: 'reboot', description: 'Reboot a server.')]
     #[Response(status: 204)]
-    public function reboot(Project $project, Server $server)
+    public function reboot(Project $project, Server $server): \Illuminate\Http\Response
     {
         $this->authorize('update', [$server, $project]);
 
@@ -95,7 +98,7 @@ class ServerController extends Controller
     #[Post('{server}/upgrade', name: 'api.projects.servers.upgrade', middleware: 'ability:write')]
     #[Endpoint(title: 'upgrade', description: 'Upgrade server.')]
     #[Response(status: 204)]
-    public function upgrade(Project $project, Server $server)
+    public function upgrade(Project $project, Server $server): \Illuminate\Http\Response
     {
         $this->authorize('update', [$server, $project]);
 
@@ -109,7 +112,7 @@ class ServerController extends Controller
     #[Delete('{server}', name: 'api.projects.servers.delete', middleware: 'ability:write')]
     #[Endpoint(title: 'delete', description: 'Delete server.')]
     #[Response(status: 204)]
-    public function delete(Project $project, Server $server)
+    public function delete(Project $project, Server $server): \Illuminate\Http\Response
     {
         $this->authorize('delete', [$server, $project]);
 

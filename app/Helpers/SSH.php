@@ -23,13 +23,13 @@ class SSH
 {
     public Server $server;
 
-    public ?ServerLog $log;
+    public ?ServerLog $log = null;
 
     protected SSH2|SFTP|null $connection = null;
 
-    protected ?string $user;
+    protected string $user = '';
 
-    protected ?string $asUser;
+    protected ?string $asUser = null;
 
     protected string $publicKey;
 
@@ -42,11 +42,11 @@ class SSH
         $this->asUser = null;
         $this->server = $server->refresh();
         $this->user = $server->getSshUser();
-        if ($asUser && $asUser != $server->getSshUser()) {
+        if ($asUser && $asUser !== $server->getSshUser()) {
             $this->asUser = $asUser;
         }
         $this->privateKey = PublicKeyLoader::loadPrivateKey(
-            file_get_contents($this->server->sshKey()['private_key_path'])
+            (string) file_get_contents($this->server->sshKey()['private_key_path'])
         );
 
         return $this;
@@ -94,13 +94,9 @@ class SSH
      */
     public function exec(string $command, string $log = '', ?int $siteId = null, ?bool $stream = false, ?callable $streamCallback = null): string
     {
-        if (! $log) {
-            $log = 'run-command';
-        }
-
-        if (! $this->log) {
-            $this->log = ServerLog::make($this->server, $log);
-            if ($siteId) {
+        if (! $this->log instanceof ServerLog && $log) {
+            $this->log = ServerLog::newLog($this->server, $log);
+            if ($siteId !== null && $siteId !== 0) {
                 $this->log->forSite($siteId);
             }
             $this->log->save();
@@ -115,35 +111,36 @@ class SSH
         }
 
         try {
-            if ($this->asUser) {
-                $command = 'sudo su - '.$this->asUser.' -c '.'"'.addslashes($command).'"';
+            if ($this->asUser !== null && $this->asUser !== '' && $this->asUser !== '0') {
+                $command = addslashes($command);
+                $command = str_replace('\\\'', '\'', $command);
+                $command = 'sudo su - '.$this->asUser.' -c '.'"'.trim($command).'"';
             }
 
             $this->connection->setTimeout(0);
-            if ($stream) {
+            if ($stream === true) {
+                /** @var callable $streamCallback */
                 $this->connection->exec($command, function ($output) use ($streamCallback) {
-                    $this->log->write($output);
+                    $this->log?->write($output);
 
                     return $streamCallback($output);
                 });
 
                 return '';
-            } else {
-                $output = '';
-                $this->connection->exec($command, function ($out) use (&$output) {
-                    $this->log->write($out);
-                    $output .= $out;
-                });
-
-                if ($this->connection->getExitStatus() !== 0 || Str::contains($output, 'VITO_SSH_ERROR')) {
-                    throw new SSHCommandError(
-                        message: 'SSH command failed with an error',
-                        log: $this->log
-                    );
-                }
-
-                return $output;
             }
+            $output = '';
+            $this->connection->exec($command, function (string $out) use (&$output): void {
+                $this->log?->write($out);
+                $output .= $out;
+            });
+            if ($this->connection->getExitStatus() !== 0 || Str::contains($output, 'VITO_SSH_ERROR')) {
+                throw new SSHCommandError(
+                    message: 'SSH command failed with an error',
+                    log: $this->log
+                );
+            }
+
+            return $output;
         } catch (Throwable $e) {
             Log::error('Error executing command', [
                 'msg' => $e->getMessage(),
@@ -159,7 +156,7 @@ class SSH
     /**
      * @throws Throwable
      */
-    public function upload(string $local, string $remote): void
+    public function upload(string $local, string $remote, ?string $owner = null): void
     {
         $this->log = null;
 
@@ -167,7 +164,18 @@ class SSH
             $this->connect(true);
         }
 
-        $this->connection->put($remote, $local, SFTP::SOURCE_LOCAL_FILE);
+        $tmpName = Str::random(10).strtotime('now');
+        $tempPath = home_path($this->user).'/'.$tmpName;
+
+        /** @phpstan-ignore-next-line */
+        $this->connection->put($tempPath, $local, SFTP::SOURCE_LOCAL_FILE);
+
+        $this->exec(sprintf('sudo mv %s %s', $tempPath, $remote));
+        if ($owner === null || $owner === '' || $owner === '0') {
+            $owner = $this->user;
+        }
+        $this->exec(sprintf('sudo chown %s:%s %s', $owner, $owner, $remote));
+        $this->exec(sprintf('sudo chmod 644 %s', $remote));
     }
 
     /**
@@ -181,28 +189,22 @@ class SSH
             $this->connect(true);
         }
 
+        /** @phpstan-ignore-next-line */
         $this->connection->get($remote, $local);
     }
 
     /**
      * @throws SSHError
      */
-    public function write(string $remotePath, string $content, bool $sudo = false): void
+    public function write(string $remotePath, string $content, ?string $owner = null): void
     {
         $tmpName = Str::random(10).strtotime('now');
 
         try {
             /** @var FilesystemAdapter $storageDisk */
             $storageDisk = Storage::disk('local');
-
             $storageDisk->put($tmpName, $content);
-
-            if ($sudo) {
-                $this->upload($storageDisk->path($tmpName), sprintf('/home/%s/%s', $this->server->ssh_user, $tmpName));
-                $this->exec(sprintf('sudo mv /home/%s/%s %s', $this->server->ssh_user, $tmpName, $remotePath));
-            } else {
-                $this->upload($storageDisk->path($tmpName), $remotePath);
-            }
+            $this->upload($storageDisk->path($tmpName), $remotePath, $owner);
         } catch (Throwable $e) {
             throw new SSHCommandError(
                 message: $e->getMessage()
@@ -219,7 +221,7 @@ class SSH
      */
     public function disconnect(): void
     {
-        if ($this->connection) {
+        if ($this->connection instanceof SSH2) {
             $this->connection->disconnect();
             $this->connection = null;
         }

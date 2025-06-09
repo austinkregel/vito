@@ -10,12 +10,7 @@ use Illuminate\Http\Client\Response;
 
 abstract class AbstractSourceControlProvider implements SourceControlProvider
 {
-    protected SourceControl $sourceControl;
-
-    public function __construct(SourceControl $sourceControl)
-    {
-        $this->sourceControl = $sourceControl;
-    }
+    public function __construct(protected SourceControl $sourceControl) {}
 
     public function createRules(array $input): array
     {
@@ -69,5 +64,10 @@ abstract class AbstractSourceControlProvider implements SourceControlProvider
         if ($res->status() == 403) {
             throw new RepositoryPermissionDenied($repo);
         }
+    }
+
+    public function getWebhookBranch(array $payload): string
+    {
+        return str($payload['ref'] ?? '')->after('refs/heads/')->toString();
     }
 }

@@ -56,6 +56,10 @@ class View extends Page
         }
 
         if ($this->site->isReady()) {
+            if (in_array(SiteFeature::COMMANDS, $this->site->type()->supportedFeatures())) {
+                $widgets[] = [Widgets\Commands::class, ['site' => $this->site]];
+            }
+
             if (in_array(SiteFeature::DEPLOYMENT, $this->site->type()->supportedFeatures())) {
                 $widgets[] = [Widgets\DeploymentsList::class, ['site' => $this->site]];
             }
@@ -110,7 +114,7 @@ class View extends Page
     {
         return Action::make('deploy')
             ->icon('heroicon-o-rocket-launch')
-            ->action(function () {
+            ->action(function (): void {
                 if (! $this->site->deploymentScript?->content) {
                     Notification::make()
                         ->danger()
@@ -119,7 +123,7 @@ class View extends Page
 
                     return;
                 }
-                run_action($this, function () {
+                run_action($this, function (): void {
                     app(Deploy::class)->run($this->site);
 
                     Notification::make()
@@ -135,12 +139,12 @@ class View extends Page
     private function autoDeploymentAction(): Action
     {
         return Action::make('auto-deployment')
-            ->label(fn () => $this->site->isAutoDeployment() ? 'Disable Auto Deployment' : 'Enable Auto Deployment')
-            ->modalHeading(fn () => $this->site->isAutoDeployment() ? 'Disable Auto Deployment' : 'Enable Auto Deployment')
-            ->modalIconColor(fn () => $this->site->isAutoDeployment() ? 'red' : 'green')
+            ->label(fn (): string => $this->site->isAutoDeployment() ? 'Disable Auto Deployment' : 'Enable Auto Deployment')
+            ->modalHeading(fn (): string => $this->site->isAutoDeployment() ? 'Disable Auto Deployment' : 'Enable Auto Deployment')
+            ->modalIconColor(fn (): string => $this->site->isAutoDeployment() ? 'red' : 'green')
             ->requiresConfirmation()
-            ->action(function () {
-                run_action($this, function () {
+            ->action(function (): void {
+                run_action($this, function (): void {
                     $this->site->isAutoDeployment()
                         ? $this->site->disableAutoDeployment()
                         : $this->site->enableAutoDeployment();
@@ -164,8 +168,8 @@ class View extends Page
                     ->default($this->site->deploymentScript?->content)
                     ->rules(UpdateDeploymentScript::rules()['script']),
             ])
-            ->action(function (array $data) {
-                run_action($this, function () use ($data) {
+            ->action(function (array $data): void {
+                run_action($this, function () use ($data): void {
                     app(UpdateDeploymentScript::class)->update($this->site, $data);
 
                     Notification::make()
@@ -184,15 +188,13 @@ class View extends Page
             ->modalHeading('Update .env file')
             ->form([
                 CodeEditorField::make('env')
-                    ->formatStateUsing(function () {
-                        return $this->site->getEnv();
-                    })
+                    ->formatStateUsing(fn (): string => $this->site->getEnv())
                     ->rules([
                         'env' => 'required',
                     ]),
             ])
-            ->action(function (array $data) {
-                run_action($this, function () use ($data) {
+            ->action(function (array $data): void {
+                run_action($this, function () use ($data): void {
                     app(UpdateEnv::class)->update($this->site, $data);
 
                     Notification::make()
@@ -215,8 +217,8 @@ class View extends Page
                     ->default($this->site->branch)
                     ->rules(UpdateBranch::rules()['branch']),
             ])
-            ->action(function (array $data) {
-                run_action($this, function () use ($data) {
+            ->action(function (array $data): void {
+                run_action($this, function () use ($data): void {
                     app(UpdateBranch::class)->update($this->site, $data);
 
                     Notification::make()

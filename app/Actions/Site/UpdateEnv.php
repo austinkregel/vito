@@ -2,19 +2,22 @@
 
 namespace App\Actions\Site;
 
-use App\Exceptions\SSHUploadFailed;
+use App\Exceptions\SSHError;
 use App\Models\Site;
 
 class UpdateEnv
 {
     /**
-     * @throws SSHUploadFailed
+     * @param  array<string, mixed>  $input
+     *
+     * @throws SSHError
      */
     public function update(Site $site, array $input): void
     {
-        $site->server->os()->editFile(
+        $site->server->os()->editFileAs(
             $site->path.'/.env',
-            $input['env']
+            $site->user,
+            trim((string) $input['env']),
         );
     }
 }

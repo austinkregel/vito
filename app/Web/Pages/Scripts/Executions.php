@@ -42,18 +42,17 @@ class Executions extends Page
     {
         $form = [
             Select::make('server')
-                ->options(function () {
-                    return auth()->user()?->currentProject?->servers?->pluck('name', 'id') ?? [];
-                })
+                ->options(fn () => auth()->user()?->currentProject?->servers?->pluck('name', 'id') ?? [])
                 ->rules(fn (Get $get) => ExecuteScript::rules($get())['server'])
                 ->searchable()
                 ->reactive(),
             Select::make('user')
                 ->rules(fn (Get $get) => ExecuteScript::rules($get())['user'])
                 ->native(false)
-                ->options(function (Get $get) {
+                ->options(function (Get $get): array {
                     $users = ['root'];
 
+                    /** @var ?Server $server */
                     $server = Server::query()->find($get('server'));
                     if ($server) {
                         $users = $server->getSshUsers();
@@ -64,7 +63,7 @@ class Executions extends Page
         ];
 
         foreach ($this->script->getVariables() as $variable) {
-            $form[] = TextInput::make($variable)
+            $form[] = TextInput::make('variables.'.$variable)
                 ->label($variable)
                 ->rules(fn (Get $get) => ExecuteScript::rules($get())['variables.*']);
         }
@@ -74,7 +73,7 @@ class Executions extends Page
                 ->icon('heroicon-o-bolt')
                 ->modalWidth(MaxWidth::Large)
                 ->form($form)
-                ->action(function (array $data) {
+                ->action(function (array $data): void {
                     app(ExecuteScript::class)->execute($this->script, $data);
 
                     $this->dispatch('$refresh');

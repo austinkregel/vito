@@ -5,6 +5,9 @@ namespace Database\Factories;
 use App\Models\FirewallRule;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
+/**
+ * @extends Factory<\App\Models\FirewallRule>
+ */
 class FirewallRuleFactory extends Factory
 {
     protected $model = FirewallRule::class;
@@ -12,6 +15,7 @@ class FirewallRuleFactory extends Factory
     public function definition(): array
     {
         return [
+            'name' => $this->faker->word,
             'type' => 'allow',
             'protocol' => 'tcp',
             'port' => $this->faker->numberBetween(1, 65535),

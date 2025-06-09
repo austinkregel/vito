@@ -27,6 +27,8 @@ class DatabaseTest extends TestCase
         ])
             ->callAction('create', [
                 'name' => 'database',
+                'charset' => 'utf8mb4',
+                'collation' => 'utf8mb4_unicode_ci',
             ])
             ->assertSuccessful();
 
@@ -47,6 +49,8 @@ class DatabaseTest extends TestCase
         ])
             ->callAction('create', [
                 'name' => 'database',
+                'charset' => 'utf8mb4',
+                'collation' => 'utf8mb4_unicode_ci',
                 'user' => true,
                 'username' => 'user',
                 'password' => 'password',
@@ -72,6 +76,7 @@ class DatabaseTest extends TestCase
     {
         $this->actingAs($this->user);
 
+        /** @var Database $database */
         $database = Database::factory()->create([
             'server_id' => $this->server,
         ]);
@@ -87,6 +92,7 @@ class DatabaseTest extends TestCase
 
         SSH::fake();
 
+        /** @var Database $database */
         $database = Database::factory()->create([
             'server_id' => $this->server,
         ]);
@@ -100,5 +106,18 @@ class DatabaseTest extends TestCase
         $this->assertSoftDeleted('databases', [
             'id' => $database->id,
         ]);
+    }
+
+    public function test_sync_databases(): void
+    {
+        $this->actingAs($this->user);
+
+        SSH::fake();
+
+        Livewire::test(Index::class, [
+            'server' => $this->server,
+        ])
+            ->callAction('sync')
+            ->assertSuccessful();
     }
 }

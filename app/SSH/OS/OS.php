@@ -3,14 +3,9 @@
 namespace App\SSH\OS;
 
 use App\Exceptions\SSHError;
-use App\Exceptions\SSHUploadFailed;
 use App\Models\Server;
 use App\Models\ServerLog;
 use App\Models\Site;
-use Illuminate\Filesystem\FilesystemAdapter;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-use Throwable;
 
 class OS
 {
@@ -146,7 +141,7 @@ class OS
      */
     public function generateSSHKey(string $name, ?Site $site = null): void
     {
-        $site->server->ssh($site->user)->exec(
+        $this->server->ssh($site?->user)->exec(
             view('ssh.os.generate-ssh-key', [
                 'name' => $name,
             ]),
@@ -160,7 +155,7 @@ class OS
      */
     public function readSSHKey(string $name, ?Site $site = null): string
     {
-        return $site->server->ssh($site->user)->exec(
+        return $this->server->ssh($site?->user)->exec(
             view('ssh.os.read-ssh-key', [
                 'name' => $name,
             ]),
@@ -178,24 +173,23 @@ class OS
     }
 
     /**
-     * @throws SSHUploadFailed
+     * @deprecated use write() instead
+     *
+     * @throws SSHError
      */
-    public function editFile(string $path, ?string $content = null): void
+    public function editFileAs(string $path, string $user, ?string $content = null): void
     {
-        $tmpName = Str::random(10).strtotime('now');
-        try {
-            /** @var FilesystemAdapter $storageDisk */
-            $storageDisk = Storage::disk('local');
-            $storageDisk->put($tmpName, $content);
-            $this->server->ssh()->upload(
-                $storageDisk->path($tmpName),
-                $path
-            );
-        } catch (Throwable) {
-            throw new SSHUploadFailed;
-        } finally {
-            $this->deleteTempFile($tmpName);
-        }
+        $sudo = $user === 'root';
+        $actualUser = $sudo ? $this->server->getSshUser() : $user;
+
+        $this->server->ssh($actualUser)->exec(
+            view('ssh.os.edit-file', [
+                'path' => $path,
+                'content' => $content,
+                'sudo' => $sudo,
+            ]),
+            'edit-file'
+        );
     }
 
     /**
@@ -203,11 +197,11 @@ class OS
      */
     public function readFile(string $path): string
     {
-        return $this->server->ssh()->exec(
+        return trim($this->server->ssh()->exec(
             view('ssh.os.read-file', [
                 'path' => $path,
             ])
-        );
+        ));
     }
 
     /**
@@ -224,17 +218,21 @@ class OS
     }
 
     /**
+     * @param  array<string, mixed>  $variables
+     *
      * @throws SSHError
      */
     public function runScript(string $path, string $script, ?ServerLog $serverLog, ?string $user = null, ?array $variables = []): ServerLog
     {
         $ssh = $this->server->ssh($user);
-        if ($serverLog) {
+        if ($serverLog instanceof \App\Models\ServerLog) {
             $ssh->setLog($serverLog);
         }
         $command = '';
-        foreach ($variables as $key => $variable) {
-            $command .= "$key=$variable\n";
+        if ($variables !== null && $variables !== []) {
+            foreach ($variables as $key => $variable) {
+                $command .= "$key=$variable\n";
+            }
         }
         $command .= view('ssh.os.run-script', [
             'path' => $path,
@@ -242,9 +240,10 @@ class OS
         ]);
         $ssh->exec($command, 'run-script');
 
-        info($command);
+        /** @var ServerLog $log */
+        $log = $ssh->log;
 
-        return $ssh->log;
+        return $log;
     }
 
     /**
@@ -263,10 +262,14 @@ class OS
     /**
      * @throws SSHError
      */
-    public function unzip(string $path): string
+    public function extract(string $path, ?string $destination = null, ?string $user = null): void
     {
-        return $this->server->ssh()->exec(
-            'unzip '.$path
+        $this->server->ssh($user)->exec(
+            view('ssh.os.extract', [
+                'path' => $path,
+                'destination' => $destination,
+            ]),
+            'extract'
         );
     }
 
@@ -282,6 +285,8 @@ class OS
     }
 
     /**
+     * @return array<string, string>
+     *
      * @throws SSHError
      */
     public function resourceInfo(): array
@@ -304,9 +309,9 @@ class OS
     /**
      * @throws SSHError
      */
-    public function deleteFile(string $path): void
+    public function deleteFile(string $path, ?string $user = null): void
     {
-        $this->server->ssh()->exec(
+        $this->server->ssh($user)->exec(
             view('ssh.os.delete-file', [
                 'path' => $path,
             ]),
@@ -314,10 +319,31 @@ class OS
         );
     }
 
-    private function deleteTempFile(string $name): void
+    /**
+     * @throws SSHError
+     */
+    public function ls(string $path, ?string $user = null): string
     {
-        if (Storage::disk('local')->exists($name)) {
-            Storage::disk('local')->delete($name);
-        }
+        return $this->server->ssh($user)->exec('ls -la '.$path);
+    }
+
+    /**
+     * @throws SSHError
+     */
+    public function write(string $path, string $content, ?string $user = null): void
+    {
+        $this->server->ssh()->write(
+            $path,
+            $content,
+            $user
+        );
+    }
+
+    /**
+     * @throws SSHError
+     */
+    public function mkdir(string $path, ?string $user = null): string
+    {
+        return $this->server->ssh($user)->exec('mkdir -p '.$path);
     }
 }

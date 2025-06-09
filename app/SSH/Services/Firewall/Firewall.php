@@ -2,9 +2,9 @@
 
 namespace App\SSH\Services\Firewall;
 
-interface Firewall
-{
-    public function addRule(string $type, string $protocol, int $port, string $source, ?string $mask): void;
+use App\SSH\Services\ServiceInterface;
 
-    public function removeRule(string $type, string $protocol, int $port, string $source, ?string $mask): void;
+interface Firewall extends ServiceInterface
+{
+    public function applyRules(): void;
 }

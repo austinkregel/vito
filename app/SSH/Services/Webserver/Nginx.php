@@ -6,7 +6,6 @@ use App\Exceptions\SSHError;
 use App\Exceptions\SSLCreationException;
 use App\Models\Site;
 use App\Models\Ssl;
-use Closure;
 use Throwable;
 
 class Nginx extends AbstractWebserver
@@ -26,27 +25,12 @@ class Nginx extends AbstractWebserver
             view('ssh.services.webserver.nginx.nginx', [
                 'user' => $this->service->server->getSshUser(),
             ]),
-            true
+            'root'
         );
 
         $this->service->server->systemd()->restart('nginx');
 
         $this->service->server->os()->cleanup();
-    }
-
-    public function deletionRules(): array
-    {
-        return [
-            'service' => [
-                function (string $attribute, mixed $value, Closure $fail) {
-                    $hasSite = $this->service->server->sites()
-                        ->exists();
-                    if ($hasSite) {
-                        $fail('Cannot uninstall webserver while you have websites using it.');
-                    }
-                },
-            ],
-        ];
     }
 
     /**
@@ -80,18 +64,14 @@ class Nginx extends AbstractWebserver
 
         $this->service->server->ssh()->write(
             '/etc/nginx/sites-available/'.$site->domain,
-            view('ssh.services.webserver.nginx.vhost', [
-                'site' => $site,
-            ]),
-            true
+            $this->generateVhost($site),
+            'root'
         );
 
         $this->service->server->ssh()->exec(
             view('ssh.services.webserver.nginx.create-vhost', [
                 'domain' => $site->domain,
-                'vhost' => view('ssh.services.webserver.nginx.vhost', [
-                    'site' => $site,
-                ]),
+                'vhost' => $this->generateVhost($site),
             ]),
             'create-vhost',
             $site->id
@@ -105,10 +85,8 @@ class Nginx extends AbstractWebserver
     {
         $this->service->server->ssh()->write(
             '/etc/nginx/sites-available/'.$site->domain,
-            $vhost ?? view('ssh.services.webserver.nginx.vhost', [
-                'site' => $site,
-            ]),
-            true
+            $vhost ?? $this->generateVhost($site),
+            'root'
         );
 
         $this->service->server->systemd()->restart('nginx');
@@ -145,7 +123,7 @@ class Nginx extends AbstractWebserver
     /**
      * @throws SSHError
      */
-    public function changePHPVersion(Site $site, $version): void
+    public function changePHPVersion(Site $site, string $version): void
     {
         $this->service->server->ssh()->exec(
             view('ssh.services.webserver.nginx.change-php-version', [
@@ -199,12 +177,23 @@ class Nginx extends AbstractWebserver
      */
     public function removeSSL(Ssl $ssl): void
     {
-        $this->service->server->ssh()->exec(
-            'sudo rm -rf '.dirname($ssl->certificate_path).'*',
-            'remove-ssl',
-            $ssl->site_id
-        );
+        if ($ssl->certificate_path) {
+            $this->service->server->ssh()->exec(
+                'sudo rm -rf '.dirname($ssl->certificate_path),
+                'remove-ssl',
+                $ssl->site_id
+            );
+        }
 
         $this->updateVHost($ssl->site);
+    }
+
+    private function generateVhost(Site $site): string
+    {
+        $vhost = view('ssh.services.webserver.nginx.vhost', [
+            'site' => $site,
+        ]);
+
+        return format_nginx_config($vhost);
     }
 }

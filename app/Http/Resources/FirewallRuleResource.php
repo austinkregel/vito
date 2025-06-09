@@ -9,10 +9,14 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /** @mixin FirewallRule */
 class FirewallRuleResource extends JsonResource
 {
+    /**
+     * @return array<string, mixed>
+     */
     public function toArray(Request $request): array
     {
         return [
             'id' => $this->id,
+            'name' => $this->name,
             'server_id' => $this->server_id,
             'type' => $this->type,
             'protocol' => $this->protocol,

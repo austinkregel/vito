@@ -7,6 +7,7 @@ use App\Enums\ServiceStatus;
 use App\Enums\UserRole;
 use App\Enums\Webserver;
 use App\Models\NotificationChannel;
+use App\Models\Redirect;
 use App\Models\Server;
 use App\Models\Site;
 use App\Models\SourceControl;
@@ -23,6 +24,8 @@ abstract class TestCase extends BaseTestCase
     protected Server $server;
 
     protected Site $site;
+
+    protected Redirect $redirect;
 
     protected NotificationChannel $notificationChannel;
 
@@ -87,6 +90,11 @@ abstract class TestCase extends BaseTestCase
         $this->server->services()->update([
             'status' => ServiceStatus::READY,
         ]);
+
+        $this->server->database()?->update(['type_data' => [
+            'charsets' => ['utf8mb3' => ['default' => 'utf8mb3_general_ci', 'list' => ['utf8mb3_general_ci']]],
+            'defaultCharset' => 'utf8mb3',
+        ]]);
     }
 
     private function setupSite(): void
@@ -102,6 +110,10 @@ abstract class TestCase extends BaseTestCase
             'path' => '/home/vito/vito.test',
             'web_directory' => 'public',
             'branch' => 'main',
+        ]);
+
+        $this->redirect = Redirect::factory()->create([
+            'site_id' => $this->site->id,
         ]);
     }
 

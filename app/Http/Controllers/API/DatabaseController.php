@@ -41,6 +41,8 @@ class DatabaseController extends Controller
     #[Post('/', name: 'api.projects.servers.databases.create', middleware: 'ability:write')]
     #[Endpoint(title: 'create', description: 'Create a new database.')]
     #[BodyParam(name: 'name', required: true)]
+    #[BodyParam(name: 'charset', required: true)]
+    #[BodyParam(name: 'collation', required: true)]
     #[ResponseFromApiResource(DatabaseResource::class, Database::class)]
     public function create(Request $request, Project $project, Server $server): DatabaseResource
     {
@@ -70,7 +72,7 @@ class DatabaseController extends Controller
     #[Delete('{database}', name: 'api.projects.servers.databases.delete', middleware: 'ability:write')]
     #[Endpoint(title: 'delete', description: 'Delete database.')]
     #[Response(status: 204)]
-    public function delete(Project $project, Server $server, Database $database)
+    public function delete(Project $project, Server $server, Database $database): \Illuminate\Http\Response
     {
         $this->authorize('delete', [$database, $server]);
 
